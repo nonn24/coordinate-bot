@@ -20,35 +20,46 @@ from skimage import feature, color
 import tempfile
 from pathlib import Path
 
-load_dotenv()
+# 環境変数の読み込み
+load_dotenv(override=True)
+
+# アクセストークンとシークレットの確認
+channel_token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN")
+channel_secret = os.environ.get("LINE_CHANNEL_SECRET")
+
+if not channel_token or not channel_secret:
+    raise ValueError("LINE_CHANNEL_ACCESS_TOKEN または LINE_CHANNEL_SECRET が設定されていません。")
 
 app = FastAPI()
-LINE_BOT_API = LineBotApi(os.environ["LINE_CHANNEL_ACCESS_TOKEN"])
-handler = WebhookHandler(os.environ["LINE_CHANNEL_SECRET"])
+LINE_BOT_API = LineBotApi(channel_token)
+handler = WebhookHandler(channel_secret)
 
 
 @app.get("/")
 def root():
     return {"title": "Echo Bot"}
 
+# 変数から直接設定を使う（環境変数から直接取得するよりも安全）
 configuration = bot.Configuration(
-    access_token=os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
+    access_token=channel_token
 )
 
 @app.post("/callback")
-async def callback(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    x_line_signature=Header(None),
-):
+async def callback(request: Request, background_tasks: BackgroundTasks):
+    # リクエストボディを取得
     body = await request.body()
-
+    body_text = body.decode("utf-8")
+    
+    # X-Line-Signatureヘッダーを取得
+    signature = request.headers.get("X-Line-Signature", "")
+    
     try:
-        background_tasks.add_task(
-            handler.handle, body.decode("utf-8"), x_line_signature
-        )
+        # バックグラウンドタスクとして実行して応答速度を向上
+        background_tasks.add_task(handler.handle, body_text, signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400, detail="Invalid signature")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
     return "ok"
 
@@ -98,17 +109,16 @@ def handle_message(event):
             LINE_BOT_API.reply_message(event.reply_token, TextMessage(text=reply_text))
             
         except Exception as e:
-            import traceback
-            print(f"Error processing image: {e}")
-            print(traceback.format_exc())
             LINE_BOT_API.reply_message(
                 event.reply_token,
-                TextMessage(text=f"画像の処理中にエラーが発生しました: {str(e)}")
+                TextMessage(text="画像の処理中にエラーが発生しました。")
             )
 
 
 # 画像処理のための定数
 TEMP_IMAGE_DIR = Path("./temp_images")
+# ディレクトリが存在しない場合は作成
+TEMP_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 def download_image_from_line(message_id):
     """LINEから画像をダウンロードして一時ファイルとして保存する"""
