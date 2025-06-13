@@ -74,8 +74,8 @@ def handle_message(event):
     if event.message.type == "text":
         message_text = event.message.text.lower()
         
-        if "プロフィール" in message_text:
-            message = TextMessage(text="齊藤京子さんについて紹介します！\n齊藤京子\n1997年9月5日生\n4/5 齊藤京子卒業コンサート in 横浜スタジアム にて日向坂46を卒業\n5/1~ 東宝芸能所属")#ここにプロフィールを流すようにするあとでかくor写真を添付
+        if "やり方" in message_text:
+            message = TextMessage(text="写真を添付すると色解析を行います！")#ここにプロフィールを流すようにするあとでかくor写真を添付
             LINE_BOT_API.reply_message(event.reply_token, message)
     
     # 画像メッセージの処理
