@@ -104,3 +104,4 @@ def handle_message(event):
 
 
 TEMP_IMAGE_DIR = Path("./temp_images")
+TEMP_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
