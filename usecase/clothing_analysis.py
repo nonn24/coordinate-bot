@@ -8,6 +8,9 @@ from pathlib import Path
 import uuid
 from skimage import feature
 from color_utils import get_color_name
+from color_utils import get_color_name
+from color_suggestions import suggest_matching_colors
+
 
 def download_image_from_line(line_bot_api, message_id, temp_dir):
     """LINEから画像をダウンロードして一時ファイルとして保存する"""
@@ -324,3 +327,16 @@ def generate_clothing_description(features):
     
     # 返信メッセージを作成
     return f"服の解析結果:\n{color_description}\n{texture_desc}\n{aspect_desc}アイテムです。"
+
+def generate_color_suggestion(features):
+    """支配的な色から色名を取得し、それに合うコーディネートカラーの説明文を返す"""
+    dominant_colors = features.get("dominant_colors", [])
+    if not dominant_colors:
+        return "色の情報が取得できませんでした。"
+
+    main_rgb = dominant_colors[0]["rgb"]
+    main_color = get_color_name(main_rgb)
+    suggestions = suggest_matching_colors(main_color)
+    
+    message = f"あなたの服の色は「{main_color}」です。\nこの色に合うおすすめカラー: {', '.join(suggestions)}です。"
+    return message

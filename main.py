@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request,BackgroundTasks, Header
+from fastapi import FastAPI, Request, BackgroundTasks, Header
 from fastapi.responses import FileResponse
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
@@ -17,7 +17,8 @@ from skimage import feature
 from usecase.clothing_analysis import (
     download_image_from_line,
     extract_clothing_features,
-    generate_clothing_description
+    generate_clothing_description,
+    generate_color_suggestion
 )
 from color_utils import get_color_name
 
@@ -35,7 +36,6 @@ app = FastAPI()
 LINE_BOT_API = LineBotApi(channel_token)
 handler = WebhookHandler(channel_secret)
 
-
 @app.get("/")
 def root():
     return {"title": "Echo Bot"}
@@ -50,10 +50,10 @@ async def callback(request: Request, background_tasks: BackgroundTasks):
     # リクエストボディを取得
     body = await request.body()
     body_text = body.decode("utf-8")
-    
+
     # X-Line-Signatureヘッダーを取得
     signature = request.headers.get("X-Line-Signature", "")
-    
+
     try:
         # バックグラウンドタスクとして実行して応答速度を向上
         background_tasks.add_task(handler.handle, body_text, signature)
@@ -64,43 +64,48 @@ async def callback(request: Request, background_tasks: BackgroundTasks):
 
     return "ok"
 
-
 @handler.add(MessageEvent)
 def handle_message(event):
     if event.type != "message":
         return
-    
+
     # テキストメッセージの処理
     if event.message.type == "text":
         message_text = event.message.text.lower()
-        
+
         if "やり方" in message_text:
-            message = TextMessage(text="写真を添付すると色解析を行います！")#ここにプロフィールを流すようにするあとでかくor写真を添付
+            message = TextMessage(text="写真を添付すると服の色を解析しておすすめのコーディネートカラーを提案します！")
             LINE_BOT_API.reply_message(event.reply_token, message)
-    
+
     # 画像メッセージの処理
     elif event.message.type == "image":
         try:
-            # 画像をダウンロード            
+            # 画像をダウンロード
             image_path = download_image_from_line(LINE_BOT_API, event.message.id, TEMP_IMAGE_DIR)
-            
+
             # 画像から特徴量を抽出
             features = extract_clothing_features(image_path)
-            
-            # 特徴量から簡単な説明を生成
-            reply_text = generate_clothing_description(features)
-            
+
+            # エラーが含まれている場合
+            if "error" in features:
+                reply_text = features["error"]
+            else:
+                # 特徴量から説明と色提案を生成
+                description = generate_clothing_description(features)
+                color_suggestion = generate_color_suggestion(features)
+                reply_text = description + "\n" + color_suggestion
+
             # 画像の処理が終わったら一時ファイルを削除
             os.remove(image_path)
-            
+
             # 結果を返信
             LINE_BOT_API.reply_message(event.reply_token, TextMessage(text=reply_text))
-            
+
         except Exception as e:
             LINE_BOT_API.reply_message(
                 event.reply_token,
                 TextMessage(text=f"画像の処理中にエラーが発生しました。: {str(e)}")
             )
 
-
 TEMP_IMAGE_DIR = Path("./temp_images")
+TEMP_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
